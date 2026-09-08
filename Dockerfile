@@ -51,7 +51,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # whisper.cpp CLI is present in both targets so `--backend whisper.cpp` works
 # even on an NVIDIA build (useful for comparison and as a fallback).
-COPY --from=whispercpp /app/build/bin/whisper-cli /usr/local/bin/whisper-cli
+#
+# The whole bin/ directory, not just the binary: upstream now builds whisper.cpp
+# against libwhisper.so and libggml*.so, which sit beside the executable. Copying
+# `whisper-cli` alone produced a binary that exits 127 the moment it runs — and
+# 127 is what a missing *file* looks like too, so it reads as "not installed".
+# That went unnoticed because the NVIDIA path never invokes it.
+COPY --from=whispercpp /app/build/bin/ /opt/whispercpp/bin/
+RUN printf '/opt/whispercpp/bin\n' > /etc/ld.so.conf.d/whispercpp.conf \
+ && ldconfig \
+ && ln -sf /opt/whispercpp/bin/whisper-cli /usr/local/bin/whisper-cli
 
 # Ubuntu marks the system Python externally managed (PEP 668); build in a venv.
 ENV VIRTUAL_ENV=/opt/venv
@@ -67,12 +76,30 @@ RUN pip install --index-url "$TORCH_INDEX" torch torchaudio
 COPY requirements.txt /tmp/requirements.txt
 RUN pip install -r /tmp/requirements.txt
 
-# pip may silently swap torch while resolving whisperx's dependency tree.
+# pip may silently swap torch while resolving whisperx's dependency tree, and it
+# swaps in whatever PyPI serves by default — which on Linux is the CUDA build.
+# Both targets therefore have to check they still have the torch they asked for.
+#
+# Both reinstalls pin the version already resolved. Asking for a bare `torch`
+# fetches the newest one, and a torch that no longer matches the torchvision
+# beside it fails as "partially initialized module 'torchvision' has no
+# attribute 'extension'" — a circular-import message that says nothing about
+# the actual cause. Same flavour, same version, different index.
+COPY scripts/pin_torch.sh /tmp/pin_torch.sh
 RUN if [ "$APP_BACKEND" = "faster-whisper" ] && \
        ! python -c "import torch,sys; sys.exit(0 if (torch.version.cuda or '').startswith('12.8') else 1)"; then \
       echo ">>> restoring cu128 torch"; \
-      pip install --force-reinstall --index-url https://download.pytorch.org/whl/cu128 \
-          torch torchaudio; \
+      sh /tmp/pin_torch.sh https://download.pytorch.org/whl/cu128; \
+    fi
+
+# The mirror image, and it was missing: on the universal target pip pulled the
+# default PyPI wheel back over the CPU one, so a build meant for AMD, Intel,
+# Apple and CPU-only machines shipped gigabytes of CUDA that could never be
+# used. Silent, because CPU inference works perfectly well with a CUDA torch.
+RUN if [ "$APP_BACKEND" = "whisper.cpp" ] && \
+       python -c "import torch,sys; sys.exit(0 if torch.version.cuda else 1)"; then \
+      echo ">>> replacing CUDA torch with the CPU build of the same version"; \
+      sh /tmp/pin_torch.sh https://download.pytorch.org/whl/cpu; \
     fi
 
 # The cu128 wheels ship cuDNN/cuBLAS under site-packages/nvidia/*/lib, where the
@@ -114,9 +141,14 @@ RUN chmod +x /usr/local/bin/entrypoint && mkdir -p /cache /work/input /work/outp
 # first real account on a typical Linux host rather than arriving root-owned.
 # Ubuntu 24.04 images already ship a placeholder user on that uid and useradd
 # exits 4 rather than reusing it, so retire it first.
+# Note what is NOT chowned: /opt/venv. On a copy-on-write filesystem `chown -R`
+# rewrites every file it touches into a new layer, and doing that to the venv
+# added 8.3 GB to this image for no benefit — the app user only ever reads it,
+# and it is already world-readable. The three directories below are empty at
+# build time, so chowning them costs nothing.
 RUN userdel --remove ubuntu 2>/dev/null || true; \
     useradd --create-home --uid 1000 app \
- && chown -R app:app /cache /work/input /work/output /opt/venv
+ && chown -R app:app /cache /work/input /work/output
 
 EXPOSE 8080
 # Dispatches: no args -> the web app, a CLI verb -> app.cli, anything else

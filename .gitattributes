@@ -1,0 +1,24 @@
+# Everything in this repository ends up inside a Linux container, so everything
+# checks out with LF — on Windows too.
+#
+# This is not a tidiness preference. Git on Windows converts to CRLF on
+# checkout by default, and a shell script with CRLF has "\r" as part of its
+# shebang line. The kernel then looks for an interpreter called "/bin/sh\r",
+# does not find it, and reports:
+#
+#     exec /usr/local/bin/entrypoint: no such file or directory
+#
+# which names the script, not the interpreter, and so reads as a missing file.
+# Without this file, cloning on Windows produced an image that could not start.
+# It went unnoticed because the machine it was developed on had LF in its
+# working tree already; only a fresh clone showed it.
+* text=auto eol=lf
+
+# Binary, so Git must not touch them at all.
+*.png binary
+*.jpg binary
+*.gguf binary
+*.wav binary
+*.mp3 binary
+*.mp4 binary
+*.m4a binary

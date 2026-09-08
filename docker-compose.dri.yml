@@ -1,0 +1,18 @@
+# Hand an AMD or Intel GPU to whisper.cpp's Vulkan backend.
+#
+# Linux only. /dev/dri is the kernel's direct-rendering interface and does not
+# exist under Docker Desktop on macOS or Windows, where Docker runs inside a VM
+# with no GPU passthrough. Docker fails the whole `up` when a listed device is
+# missing rather than ignoring it, which is why this is a separate file instead
+# of a line in docker-compose.yml.
+#
+#   COMPOSE_PROFILES=universal \
+#   docker compose -f docker-compose.yml -f docker-compose.dri.yml up
+#
+# Without it the universal profile still works — it just runs on CPU, which is
+# correct, only slower. Check `ls /dev/dri` first; if that path does not exist,
+# this file will not help you.
+services:
+  app-universal:
+    devices:
+      - /dev/dri:/dev/dri

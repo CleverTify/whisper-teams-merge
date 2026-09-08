@@ -120,10 +120,16 @@ services:
     environment:
       LLM_BASE_URL: http://llm-universal:8081/v1
     depends_on: [llm-universal]
-    # /dev/dri exposes AMD and Intel GPUs to Vulkan. Absent on macOS, where
-    # Docker has no GPU access at all — that path runs on CPU.
-    devices:
-      - /dev/dri:/dev/dri
+    # No `devices: /dev/dri` here, deliberately.
+    #
+    # /dev/dri is what exposes an AMD or Intel GPU to Vulkan, and it only exists
+    # on Linux. Docker treats a missing device as a hard error rather than
+    # skipping it, so listing it unconditionally made `docker compose up` die
+    # with "error gathering device information" on every Mac and Windows host —
+    # exactly the machines this profile exists to serve.
+    #
+    # Linux users with an AMD or Intel GPU opt in:
+    #   docker compose -f docker-compose.yml -f docker-compose.dri.yml up
 
   llm-universal:
     <<: *llm

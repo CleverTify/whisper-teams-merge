@@ -22,10 +22,18 @@ You need Docker, and for the NVIDIA path the
 — without it `docker compose up` fails with `could not select device driver ""
 with capabilities: [[gpu]]`, which is not a hint anyone enjoys receiving.
 
-Budget **~25 GB of disk**: about 10 GB of image, and ~15 GB of models fetched on
-first start into `./cache` — Whisper large-v3, the pyannote diarizer, the merge
-LLM, and the vision model that describes screen recordings. After that it never
-needs the network again.
+Budget **~35 GB of disk**, measured rather than estimated:
+
+| | |
+|---|---|
+| the NVIDIA image | ~20 GB — most of it the cu128 PyTorch wheels, which bundle CUDA's own libraries |
+| models, fetched on first start into `./cache` | ~15 GB |
+
+The models are Whisper large-v3 (2.9 GB), the pyannote diarizer, a per-language
+forced aligner, the Qwen3-8B merge model (4.7 GB), and — only with the `screen`
+profile — the Qwen3-VL vision model and its projector (5.4 GB). Drop `screen`
+from `COMPOSE_PROFILES` and you save that last 5.4 GB. After the first run it
+never needs the network again.
 
 Set `HF_TOKEN` in `.env` if you want automatic speaker detection — see
 [Diarization](#diarization). You do not need it when you upload a Teams

@@ -31,6 +31,16 @@ def main() -> int:
 
     print(f"backend={backend} torch={torch.__version__} torch.cuda={torch.version.cuda or 'cpu'}")
 
+    # The universal target must not carry CUDA torch. Nothing breaks visibly if
+    # it does -- CPU inference works fine either way -- so the only symptom is a
+    # multi-gigabyte image full of kernels the machine cannot run. Assert it,
+    # because "silently several GB larger" is exactly the class of problem that
+    # survives to a release.
+    if backend == "whisper.cpp" and torch.version.cuda:
+        problems.append(
+            f"universal build has CUDA torch ({torch.__version__}); pip pulled "
+            f"the default PyPI wheel back over the CPU one")
+
     if backend == "faster-whisper":
         import ctranslate2
 
