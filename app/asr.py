@@ -169,7 +169,8 @@ class WhisperCpp:
             return self.model_path
         raise ASRError(
             f"whisper.cpp model missing: {self.model_path}\n"
-            "Run `docker compose run --rm app warmup` to download it."
+            "Run `docker compose run --rm app-universal warmup` to download "
+            "it (or `app` on the nvidia profile)."
         )
 
     def transcribe(self, audio: np.ndarray, language: str) -> list[dict]:

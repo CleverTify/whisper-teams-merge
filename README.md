@@ -70,9 +70,20 @@ Two things worth knowing rather than discovering later:
 
 - **Apple Silicon gets no GPU in Docker.** Apple's Hypervisor.framework exposes
   no virtual GPU, and Apple's own Container runtime lists passthrough only on
-  its roadmap. On a Mac this runs on CPU — correct, just slow.
+  its roadmap. On a Mac this runs on CPU — correct, just slow. Measured on the
+  `universal` build: **0.3x realtime**, so budget around three hours for a
+  one-hour meeting, and start it before you need it.
 - **AMD needs whisper.cpp** because CTranslate2 has no ROCm backend at all, so
-  faster-whisper cannot drive an AMD GPU. Vulkan covers AMD and Intel.
+  faster-whisper cannot drive an AMD GPU. Vulkan covers AMD and Intel — but the
+  device has to be handed in explicitly, and only Linux has one to hand:
+
+  ```bash
+  docker compose -f docker-compose.yml -f docker-compose.dri.yml up
+  ```
+
+  Without that overlay the universal profile still works, on CPU. With it on a
+  machine that has no `/dev/dri`, Docker refuses to start anything at all,
+  which is why it is not the default.
 
 ## How it works
 
