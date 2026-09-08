@@ -1,0 +1,11 @@
+.env
+input/
+output/
+cache/
+.git/
+__pycache__/
+*.pyc
+*.m4a
+*.mp3
+*.mp4
+*.wav

@@ -1,0 +1,26 @@
+# Core engine. whisperx pulls faster-whisper, pyannote.audio>=4, transformers,
+# pandas, numpy, nltk. We do NOT pin those — whisperx resolves them coherently.
+whisperx>=3.4.3
+
+# HARD REQUIREMENT on Blackwell (sm_120: RTX 50-series, including the laptop
+# parts). Older cards are unaffected and any recent version will do.
+#   CTranslate2 4.6.2 -> "Disable INT8 for sm120 - Blackwell GPUs"
+#   CTranslate2 4.6.3 -> "Support for CUDA 12.8"
+# Anything older either crashes (CUBLAS_STATUS_NOT_SUPPORTED) or has no sm_120 kernels.
+ctranslate2>=4.6.3
+
+# Universal forced-alignment fallback (torchaudio MMS_FA) needs romanization
+# for languages that have no dedicated wav2vec2 aligner.
+uroman>=1.3.1.1
+
+# Exports
+python-docx>=1.1.2
+
+# Web UI
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+pydantic-settings>=2.6.0
+
+# Audio IO
+soundfile>=0.12.1

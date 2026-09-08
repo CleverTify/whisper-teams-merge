@@ -1,0 +1,34 @@
+# NVIDIA Canary-1B-v2, isolated on purpose.
+#
+# This is a throwaway benchmark image, not part of the pipeline. NeMo pins
+# numpy<2.0 while WhisperX in the main image needs numpy>=2, so the two cannot
+# share an environment — hence a separate image rather than a new dependency.
+#
+# It produces the same cached-reference JSON shape as scripts/fetch_soniox.py,
+# so scripts/bench_wording.py can score Canary as a fourth engine with no new
+# scoring code. If Canary loses, delete this file and nothing else changes.
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_NO_CACHE_DIR=1 \
+    HF_HOME=/cache/hf \
+    TORCH_HOME=/cache/torch
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3 python3-venv python3-dev build-essential \
+        ffmpeg libsndfile1 curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv "$VIRTUAL_ENV"
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
+
+# Blackwell (sm_120) needs the cu128 wheels; the default index ships builds that
+# do not cover this architecture.
+RUN pip install --upgrade pip setuptools wheel Cython packaging \
+ && pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
+
+RUN pip install "nemo_toolkit[asr]"
+
+WORKDIR /work
+ENTRYPOINT ["python"]

@@ -1,0 +1,62 @@
+name: Bug report
+description: Something does not work
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Nearly every failure here is hardware- or model-specific, so the
+        `warmup` output below is usually more useful than the description.
+
+  - type: textarea
+    id: warmup
+    attributes:
+      label: Output of `docker compose run --rm app warmup`
+      description: >
+        Paste it whole. It reports the GPU and its compute capability, whether
+        CUDA is visible inside the container, whether HF_TOKEN works, and
+        whether the gated pyannote repositories have been accepted.
+      render: text
+    validations:
+      required: true
+
+  - type: input
+    id: profiles
+    attributes:
+      label: COMPOSE_PROFILES
+      description: The line from your .env — e.g. `nvidia,screen` or `universal`.
+      placeholder: nvidia,screen
+    validations:
+      required: true
+
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      description: OS, Docker version, and GPU if you have one.
+      placeholder: "Ubuntu 24.04, Docker 27.3, RTX 4070"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: >
+        What you ran, what you expected, what you got. If a job failed, the
+        `error` field from `GET /api/jobs` or the container log around the
+        failure is the useful part.
+    validations:
+      required: true
+
+  - type: input
+    id: media
+    attributes:
+      label: The recording
+      description: >
+        Format, length, language, roughly how many speakers, and the bitrate if
+        you know it. **Do not attach the audio** — it is someone's conversation,
+        and we cannot accept it.
+      placeholder: "mp4, 40 min, Czech, 2 speakers, 16 kHz mono"
+    validations:
+      required: false

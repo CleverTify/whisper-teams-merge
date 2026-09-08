@@ -1,0 +1,33 @@
+# Secrets
+.env
+
+# Data + artifacts
+input/*
+!input/.gitkeep
+output/*
+!output/.gitkeep
+cache/
+*.m4a
+*.mp3
+*.mp4
+*.wav
+
+__pycache__/
+*.pyc
+
+# Frozen benchmark runs — untracked in full, deliberately.
+#
+# Everything under here is derived from one real meeting: quoted sentences,
+# a speaker's name bound to a spoken word and a timestamp, word-pair tables.
+# None of it is reproducible without the recording, which is rightly not here
+# either. The scoring harness lives in scripts/bench/ and runs on your own
+# material; what it measured for this project is written up in
+# docs/BENCHMARKS.md.
+#
+# Anchored with a leading slash: an unanchored `bench/` matches at any depth
+# and silently swallowed scripts/bench/, the harness itself.
+/bench/
+
+# Media that was dropped at the repo root instead of input/
+/*.m4a
+/*.mp4

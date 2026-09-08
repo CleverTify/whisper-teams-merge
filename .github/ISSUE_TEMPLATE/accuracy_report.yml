@@ -1,0 +1,58 @@
+name: Accuracy problem or improvement
+description: The transcript is wrong, or you have a change that makes it better
+labels: [accuracy]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Read this first, because it will save you time.
+
+        Three *identical* runs of the shipped configuration land 0.02 points
+        apart on the benchmark. Most plausible-sounding improvements land inside
+        that spread. Of the seven measured properly over this project's life,
+        six lost and one won by 0.07 points.
+
+        So a claim needs a number, and the number needs to come from comparing
+        two runs the same way. `docs/BENCHMARKS.md` explains how.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Which is this?
+      options:
+        - Wrong output, no proposed fix
+        - A change I have measured
+        - A change I have not measured yet
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: What is wrong
+      description: >
+        Quote the words, not the audio. "we write X where the speaker said Y",
+        with the timestamps. A handful of examples is far more useful than one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: numbers
+    attributes:
+      label: Measurement, if you have one
+      description: >
+        Output of `scripts/bench/bench_ci.py` comparing the two arms, plus both
+        headline figures from `bench_wording.py` (witness error and the
+        Soniox-only control). A delta whose interval spans zero is not yet a
+        result — say so rather than rounding it up.
+      render: text
+    validations:
+      required: false
+
+  - type: input
+    id: language
+    attributes:
+      label: Language and recording quality
+      placeholder: "Czech, 16 kHz 59 kbps mono, heavy crosstalk"
+    validations:
+      required: true

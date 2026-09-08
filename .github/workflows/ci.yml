@@ -1,0 +1,66 @@
+name: CI
+
+# GitHub runners have no GPU and no room for 15 GB of models, so this cannot
+# exercise the pipeline. What it can do is catch the failures that actually
+# happened here: a module that stopped importing, and a regression in the two
+# guards that stand between an uploaded transcript and the browser.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Deliberately not requirements.txt: that pulls torch, whisperx and
+      # pyannote — gigabytes, for tests that need none of them. These four
+      # exercise pure-Python logic only.
+      - name: Install the little that is needed
+        run: pip install pydantic-settings
+
+      - name: Guardrails, windowing and prompt assembly
+        run: python tests/test_guardrail.py
+
+      - name: Teams name-variant merging
+        run: python tests/test_teams_names.py
+
+      - name: Speaker names cannot break their sinks
+        run: python tests/test_speaker_name_safety.py
+
+      # tests/test_turn_invariants.py is deliberately not here: it imports
+      # app.pipeline, which pulls torch, whisperx and pyannote. Run it in the
+      # container, where that stack already exists:
+      #   docker compose run --rm app python tests/test_turn_invariants.py
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ruff
+      - name: Syntax and obvious mistakes
+        # Not a style gate. E501 and friends are left alone on purpose: the
+        # comments in this repo carry measurements and reflowing them to please
+        # a linter makes them worse.
+        run: ruff check --select F,E9 app scripts tests
+
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker-compose.yml parses, and every profile resolves
+        run: |
+          cp .env.example .env
+          for profile in nvidia universal "nvidia,screen"; do
+            echo "--- COMPOSE_PROFILES=$profile"
+            COMPOSE_PROFILES="$profile" docker compose config --services
+          done

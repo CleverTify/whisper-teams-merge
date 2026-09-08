@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Transcribe</title>
+<style>
+  /* --------------------------------------------------------------------
+     Microsoft Teams look, on Fluent 2.
+
+     Real Fluent 2 alias tokens hand-applied as CSS custom properties rather
+     than pulled from @fluentui/web-components: the app must run fully offline
+     inside the container with no build step, and a CDN dependency would break
+     that.
+
+     Colours follow Fluent's global ramps. Neutrals use grey[N] where N is
+     percent lightness (grey[16] = #292929). The brand ramp is *brandTeams*
+     from @fluentui/tokens — Teams purple, not M365 blue:
+        60 #444791 · 70 #4f52b2 · 80 #5b5fc7 · 100 #7f85f5 · 160 #e8ebfa
+     -------------------------------------------------------------------- */
+  :root {
+    /* light theme — colorNeutralBackground1..3, Foreground1..3, Stroke1..2 */
+    --bg:#f5f5f5;              /* grey[96]  canvas            */
+    --panel:#ffffff;           /* white     colorNeutralBackground1 */
+    --panel2:#fafafa;          /* grey[98]  colorNeutralBackground2 */
+    --panel3:#f0f0f0;          /* grey[94]  subtle hover      */
+    --line:#e0e0e0;            /* grey[88]  colorNeutralStroke2 */
+    --line-strong:#d1d1d1;     /* grey[82]  colorNeutralStroke1 */
+    --fg:#242424;              /* grey[14]  colorNeutralForeground1 */
+    --fg2:#424242;             /* grey[26]  colorNeutralForeground2 */
+    --muted:#616161;           /* grey[38]  colorNeutralForeground3 */
+    /* Teams brand ramp (brandTeams from @fluentui/tokens), not M365 blue */
+    --accent:#5b5fc7;          /* brandTeams[80]  colorBrandBackground */
+    --accent-hover:#4f52b2;    /* brandTeams[70] */
+    --accent-pressed:#444791;  /* brandTeams[60] */
+    --accent-fg:#ffffff;       /* colorNeutralForegroundOnBrand */
+    --accent-subtle:#e8ebfa;   /* brandTeams[160] selection tint */
+    --ok:#0e700e; --err:#c50f1f; --warn:#bc4b09;
+    --hl:#e8ebfa;
+
+    /* Fluent radii */
+    --r-sm:2px; --r-md:4px; --r-lg:6px; --r-xl:8px;
+    /* Fluent elevation (shadow2 / shadow4 / shadow8) */
+    --sh2:0 1px 2px rgba(0,0,0,.14), 0 0 2px rgba(0,0,0,.12);
+    --sh4:0 2px 4px rgba(0,0,0,.14), 0 0 2px rgba(0,0,0,.12);
+    --sh8:0 4px 8px rgba(0,0,0,.14), 0 0 2px rgba(0,0,0,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#141414;            /* grey[8]  */
+      --panel:#292929;         /* grey[16] colorNeutralBackground1 (dark) */
+      --panel2:#1f1f1f;        /* grey[12] */
+      --panel3:#333333;        /* grey[20] subtle hover */
+      --line:#3d3d3d;          /* grey[24] */
+      --line-strong:#525252;   /* grey[32] colorNeutralStroke1 (dark) */
+      --fg:#ffffff;
+      --fg2:#d6d6d6;           /* grey[84] */
+      --muted:#adadad;         /* grey[68] */
+      --accent:#4f52b2;        /* brandTeams[70] — brand background in dark */
+      --accent-hover:#5b5fc7;  /* brandTeams[80] */
+      --accent-pressed:#444791;
+      --accent-subtle:#2f2f4a; /* brandTeams[20] */
+      --ok:#54b054; --err:#dc626d; --warn:#e08842;
+      --hl:#2f2f4a;
+      --sh2:0 1px 2px rgba(0,0,0,.28), 0 0 2px rgba(0,0,0,.24);
+      --sh4:0 2px 4px rgba(0,0,0,.28), 0 0 2px rgba(0,0,0,.24);
+      --sh8:0 4px 8px rgba(0,0,0,.28), 0 0 2px rgba(0,0,0,.24);
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+         /* Fluent 2 type ramp: body1 = 14px/20px */
+         font:14px/20px "Segoe UI Variable Text","Segoe UI Variable",
+              "Segoe UI",system-ui,-apple-system,"Helvetica Neue",sans-serif; }
+
+  /* Teams title bar */
+  header { padding:0 12px; height:48px; background:var(--accent);
+           display:flex; align-items:center; gap:12px;
+           position:fixed; top:0; left:0; right:0; z-index:60; }
+  header .brandmark { display:flex; align-items:center; gap:8px; flex:none; }
+  header .muted { color:rgba(255,255,255,.82); }
+  h1 { font-size:14px; line-height:20px; margin:0; font-weight:600;
+       color:#fff; letter-spacing:0; }
+
+  .shell { padding-top:48px; }
+  .muted { color:var(--muted); font-size:12px; line-height:16px; }
+  main { max-width:1180px; margin:0 auto; padding:20px; display:grid; gap:16px; }
+  .card { background:var(--panel); border:1px solid var(--line);
+          border-radius:var(--r-xl); padding:18px 20px; box-shadow:var(--sh2); }
+  .card h2 { font-size:16px; line-height:22px; letter-spacing:0;
+             color:var(--fg); margin:0 0 14px; font-weight:600;
+             text-transform:none; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  label { font-size:12px; color:var(--muted); display:flex; flex-direction:column; gap:4px; }
+  /* Fluent input: 1px neutral stroke with a heavier accent underline on focus */
+  select, input { font:inherit; color:var(--fg); background:var(--panel);
+    border:1px solid var(--line-strong); border-bottom-color:var(--muted);
+    border-radius:var(--r-md); padding:5px 10px; min-height:32px;
+    transition:border-color .1s; }
+  select:hover, input:hover { border-color:var(--muted); }
+  select:focus-visible, input:focus-visible { outline:none;
+    border-color:var(--line-strong); border-bottom:2px solid var(--accent);
+    padding-bottom:4px; }
+
+  /* Fluent button: primary = brand fill, secondary = neutral outline */
+  button { font:inherit; font-weight:600; cursor:pointer; min-height:32px;
+    padding:5px 12px; border-radius:var(--r-md); border:1px solid transparent;
+    background:var(--accent); color:var(--accent-fg); transition:background .1s; }
+  button:hover { background:var(--accent-hover); }
+  button:active { background:var(--accent-pressed); }
+  button.ghost { background:var(--panel); color:var(--fg);
+                 border-color:var(--line-strong); font-weight:600; }
+  button.ghost:hover { background:var(--panel3); }
+  button.ghost.on { border-color:var(--accent); color:var(--accent); }
+  button:disabled { background:var(--panel3); color:var(--muted);
+                    border-color:var(--line); cursor:not-allowed; }
+  :focus-visible { outline:2px solid var(--fg); outline-offset:1px; }
+
+  /* drop zone */
+  .drop { border:1px dashed var(--line-strong); border-radius:var(--r-xl);
+          padding:32px 18px; text-align:center; cursor:pointer;
+          transition:.1s; background:var(--panel2); }
+  .drop:hover { background:var(--panel3); border-color:var(--muted); }
+  .drop.over { border-color:var(--accent); background:var(--accent-subtle);
+               border-style:solid; }
+  .drop h3 { margin:0 0 6px; font-size:20px; line-height:26px; font-weight:600; }
+  .picked { display:flex; gap:8px; flex-wrap:wrap; justify-content:center;
+            margin-top:14px; }
+  .chip { background:var(--panel); border:1px solid var(--line-strong);
+          border-radius:var(--r-md); padding:5px 12px; font-size:12px;
+          box-shadow:var(--sh2); }
+  .chip b { color:var(--accent); font-weight:600; }
+  .chip.teams b { color:var(--ok); }
+
+  .bar { height:4px; background:var(--line); border-radius:99px;
+         overflow:hidden; flex:1 1 160px; }
+  .bar > i { display:block; height:100%; background:var(--accent); width:0;
+             transition:width .3s ease; }
+
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:9px 10px;
+           border-bottom:1px solid var(--line); font-size:14px; }
+  th { color:var(--muted); font-weight:600; font-size:12px;
+       text-transform:none; letter-spacing:0; }
+  tbody tr:hover { background:var(--panel3); }
+  tr:last-child td { border-bottom:none; }
+  .dl { display:flex; gap:8px; flex-wrap:wrap; }
+  .dl a { text-decoration:none; background:var(--panel);
+          border:1px solid var(--line-strong); color:var(--fg);
+          padding:5px 12px; border-radius:var(--r-md); font-size:14px;
+          min-height:32px; display:inline-flex; align-items:center; }
+  .dl a:hover { background:var(--panel3); }
+  .hide { display:none !important; }
+  .err { color:var(--err); white-space:pre-wrap; font-size:12px;
+         font-family:ui-monospace,monospace; }
+
+  /* review split */
+  .split { display:grid; grid-template-columns:minmax(0,1fr) minmax(330px,460px);
+           gap:16px; align-items:start; }
+  @media (max-width:980px) { .split { grid-template-columns:1fr; } }
+  /* offset by the fixed 48px Teams title bar */
+  .side { position:sticky; top:68px; display:flex; flex-direction:column;
+          border:1px solid var(--line); border-radius:var(--r-xl);
+          background:var(--panel); overflow:hidden; box-shadow:var(--sh2);
+          max-height:calc(100vh - 88px); }
+  .card h2 { scroll-margin-top:64px; }
+  section.card { scroll-margin-top:64px; }
+  .sidehead { padding:10px 12px; border-bottom:1px solid var(--line);
+              background:var(--panel2); display:grid; gap:8px; flex:none; }
+  .sidetitle { font-size:14px; text-transform:none; letter-spacing:0;
+               color:var(--fg); font-weight:600; display:flex;
+               justify-content:space-between; align-items:center; }
+  .player { background:var(--panel2); border:1px solid var(--line);
+            border-radius:var(--r-xl); padding:14px; display:grid; gap:10px;
+            margin-bottom:16px; }
+  #media { width:100%; max-height:38vh; background:#000;
+           border-radius:var(--r-lg); display:block; object-fit:contain; }
+  #media.novideo { display:none; }
+  .pbtn { width:36px; height:36px; border-radius:50%; padding:0;
+          display:grid; place-items:center; flex:none; font-size:13px; }
+  .clock { font-variant-numeric:tabular-nums; font-size:12px;
+           color:var(--muted); white-space:nowrap; }
+  .clock b { color:var(--fg); }
+  #seek { flex:1 1 200px; accent-color:var(--accent); background:none;
+          border:none; padding:0; min-width:140px; min-height:0; }
+  .turns { flex:1 1 auto; overflow-y:auto; padding:4px 12px;
+           scroll-behavior:smooth; min-height:220px; }
+  .turn { padding:10px 8px; border-bottom:1px solid var(--line);
+          border-radius:var(--r-md); cursor:pointer; scroll-margin:120px; }
+  .turn:last-child { border-bottom:none; }
+  .turn:hover { background:var(--panel3); }
+  /* Fluent selection: tinted fill plus a brand rail, not just a colour wash */
+  .turn.active { background:var(--hl); box-shadow:inset 2px 0 0 var(--accent); }
+  .turn.dim { opacity:.3; }
+  .thead { display:flex; gap:8px; align-items:baseline; margin-bottom:2px; }
+  .thead time { color:var(--muted); font-variant-numeric:tabular-nums; font-size:12px; }
+  .spk { font-weight:600; font-size:14px; }
+  .lang { font-size:11px; color:var(--muted); border:1px solid var(--line-strong);
+          border-radius:var(--r-sm); padding:0 5px; }
+  .w { border-radius:var(--r-sm); }
+  .w.now { background:var(--accent); color:#fff; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brandmark">
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="#fff" aria-hidden="true">
+      <path d="M10 2a3 3 0 0 1 3 3v5a3 3 0 1 1-6 0V5a3 3 0 0 1 3-3Zm5.5 8a.5.5 0 0 1 1 0 6.5 6.5 0 0 1-6 6.48V18h2a.5.5 0 0 1 0 1H7.5a.5.5 0 0 1 0-1h2v-1.52A6.5 6.5 0 0 1 3.5 10a.5.5 0 0 1 1 0 5.5 5.5 0 0 0 11 0Z"/>
+    </svg>
+    <h1>Transcribe</h1>
+  </div>
+  <span class="muted" id="cfg"></span>
+</header>
+
+<div class="shell">
+<main>
+  <section class="card" id="newCard">
+    <div class="drop" id="drop">
+      <h3>Drop a recording here</h3>
+      <div class="muted">audio or video &nbsp;·&nbsp; optionally add the Teams
+        <code>.vtt</code>/<code>.docx</code> transcript for real speaker names</div>
+      <div class="picked" id="picked"></div>
+      <input type="file" id="files" multiple class="hide"
+             accept="audio/*,video/*,.vtt,.docx">
+    </div>
+    <div class="row" style="margin-top:14px; justify-content:center; gap:14px">
+      <label style="flex-direction:row; align-items:center; gap:8px">
+        How many people?
+        <input id="speakers" type="number" min="1" max="20" placeholder="auto"
+               style="width:82px" title="Leave blank to detect automatically.
+Set it when you know — automatic detection can split one person into several
+when their audio changes mid-call.">
+      </label>
+      <button id="start" style="padding:10px 30px">Transcribe</button>
+    </div>
+    <div class="row hide" id="progress" style="margin-top:14px">
+      <span class="muted" id="stage">queued</span>
+      <div class="bar"><i id="pbar"></i></div>
+      <span class="muted" id="pct">0%</span>
+    </div>
+    <p class="muted" id="hint" style="margin:10px 0 0"></p>
+  </section>
+
+  <section class="card" id="listCard">
+    <h2>Transcripts</h2>
+    <table>
+      <thead><tr><th>Recording</th><th>Length</th><th>Languages</th>
+        <th>Speakers</th><th>From</th><th>LLM</th><th></th></tr></thead>
+      <tbody id="outputs"></tbody>
+    </table>
+  </section>
+
+  <section class="card hide" id="review">
+    <h2 id="revTitle">Review</h2>
+    <div class="split">
+      <div>
+        <div class="player" id="player">
+          <div class="row">
+            <button class="pbtn" id="play" title="Play / pause (Space)">▶</button>
+            <span class="clock"><b id="cur">00:00:00</b> / <span id="dur">--:--:--</span></span>
+            <input type="range" id="seek" min="0" max="1000" value="0">
+            <select id="speed" style="padding:5px 7px">
+              <option value="0.75">0.75×</option><option value="1" selected>1×</option>
+              <option value="1.25">1.25×</option><option value="1.5">1.5×</option>
+              <option value="2">2×</option>
+            </select>
+          </div>
+          <video id="media" preload="metadata" playsinline class="novideo"></video>
+          <p class="muted" style="margin:0">Space play/pause · ←/→ ±5s ·
+            Shift+←/→ prev/next turn · ↑/↓ speed · / search</p>
+        </div>
+        <p class="muted" id="summary"></p>
+        <table>
+          <thead><tr><th style="width:150px">Label</th><th>Name</th>
+            <th>Talk</th><th>Share</th><th>Turns</th></tr></thead>
+          <tbody id="speakers"></tbody>
+        </table>
+        <div class="row" style="margin:12px 0">
+          <button id="save">Save names</button>
+          <span class="muted" id="savemsg"></span>
+        </div>
+        <div class="dl" id="downloads"></div>
+      </div>
+      <aside class="side">
+        <div class="sidehead">
+          <div class="sidetitle"><span>Live transcript</span>
+            <button class="ghost on" id="follow" style="padding:3px 9px;font-size:11px">Follow</button>
+          </div>
+          <div class="row">
+            <input id="search" placeholder="Search…  ( / )" style="flex:1 1 120px">
+            <span class="muted" id="hits"></span>
+          </div>
+          <select id="spkfilter"><option value="">All speakers</option></select>
+        </div>
+        <div class="turns" id="turns"></div>
+      </aside>
+    </div>
+  </section>
+</main>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+// Quotes matter as much as angle brackets: every use below is inside a
+  // double-quoted HTML attribute, so a speaker name containing a quote --
+  // which a Teams VTT can carry, and which teams.py's html.unescape() will
+  // happily decode for you -- escapes the attribute and not the tag.
+  const esc = s => String(s).replace(/[<>&"']/g,
+    c => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&#39;'}[c]));
+const clock = s => { s = Math.max(0, s|0);
+  return [s/3600|0, (s/60|0)%60, s%60].map(n => String(n|0).padStart(2,'0')).join(':'); };
+const api = async (u, o) => { const r = await fetch(u, o);
+  if (!r.ok) throw new Error(await r.text() || r.statusText);
+  return r.headers.get('content-type')?.includes('json') ? r.json() : r.text(); };
+const HUES = [210,145,35,285,0,175,55,320,250,105];
+
+let picked = {media:null, transcript:null};
+let R = {name:null, turns:[], starts:[], els:[], words:[], turn:-1, word:-1,
+         offset:0, follow:true, hits:[], hitAt:-1};
+
+/* ---------- setup ---------- */
+
+/* Retry a fetch a few times before giving up.
+   The server restarts often enough (and the LLM takes minutes to warm) that a
+   single failed call used to leave a placeholder like "loading…" on screen
+   permanently, which reads as a hung app rather than a transient blip. */
+async function retry(fn, tries = 5, waitMs = 1500) {
+  let last;
+  for (let i = 0; i < tries; i++) {
+    try { return await fn(); }
+    catch (e) { last = e; await new Promise(r => setTimeout(r, waitMs)); }
+  }
+  throw last;
+}
+
+async function loadConfig() {
+  try {
+    const c = await retry(() => api('/api/config'));
+    $('#cfg').textContent =
+      `v${c.version} · ${c.backend} · ${c.device}` +
+      (c.llm_enabled ? (c.llm_ready ? ` · LLM ${c.llm_model}` : ' · LLM starting…') : '')
+      + (c.hf_token ? '' : ' · no HF_TOKEN (diarization needs one)');
+    // The LLM can take minutes to load its model; keep checking until it is up
+    // instead of leaving "starting…" on screen for the rest of the session.
+    if (c.llm_enabled && !c.llm_ready) setTimeout(loadConfig, 10000);
+  } catch (err) {
+    $('#cfg').textContent = 'server not reachable — retrying…';
+    setTimeout(loadConfig, 5000);
+  }
+}
+
+function renderPicked() {
+  const bits = [];
+  if (picked.media) bits.push(`<span class="chip"><b>media</b> ${esc(picked.media.name)}</span>`);
+  if (picked.transcript) bits.push(`<span class="chip teams"><b>Teams transcript</b> ${esc(picked.transcript.name)}</span>`);
+  $('#picked').innerHTML = bits.join('');
+  $('#hint').textContent = picked.transcript
+    ? 'Speakers will be taken from the Teams transcript, and the LLM will merge both transcripts.'
+    : picked.media ? 'No Teams transcript — speakers will be detected automatically.' : '';
+}
+
+function take(files) {
+  for (const f of files) {
+    const ext = '.' + f.name.split('.').pop().toLowerCase();
+    if (['.vtt','.docx'].includes(ext)) picked.transcript = f;
+    else picked.media = f;
+  }
+  renderPicked();
+}
+
+const drop = $('#drop');
+drop.onclick = () => $('#files').click();
+$('#files').onchange = e => take(e.target.files);
+['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach(ev => drop.addEventListener(ev, e => {
+  e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => take(e.dataTransfer.files));
+
+$('#start').onclick = async () => {
+  if (!picked.media) { $('#hint').textContent = 'Pick a recording first.'; return; }
+  // No options in the UI on purpose: language is auto-detected, speaker count
+  // is inferred (or taken from the Teams transcript), and the LLM always runs.
+  // Anything unusual is a CLI flag, not a control everyone has to look at.
+  const fd = new FormData();
+  fd.append('media', picked.media);
+  if (picked.transcript) fd.append('transcript', picked.transcript);
+  if ($('#speakers').value) fd.append('speakers', $('#speakers').value);
+
+  $('#start').disabled = true;
+  $('#progress').classList.remove('hide');
+  $('#stage').textContent = 'uploading…';
+  try {
+    const r = await api('/api/jobs', {method:'POST', body:fd});
+    watch(r.id);
+  } catch (err) {
+    $('#hint').innerHTML = `<span class="err">${esc(err.message)}</span>`;
+    $('#start').disabled = false;
+  }
+};
+
+function watch(id) {
+  const es = new EventSource(`/api/jobs/${id}/events`);
+  es.onmessage = e => {
+    const d = JSON.parse(e.data);
+    $('#stage').textContent = d.stage || d.status;
+    $('#pbar').style.width = (d.progress*100).toFixed(1) + '%';
+    $('#pct').textContent = Math.round(d.progress*100) + '%';
+    if (d.status === 'done') {
+      es.close(); $('#start').disabled = false;
+      $('#stage').textContent = 'done';
+      loadOutputs().then(() => d.output && openOutput(d.output));
+    } else if (d.status === 'error') {
+      es.close(); $('#start').disabled = false;
+      $('#hint').innerHTML = `<span class="err">${esc(d.error || 'failed')}</span>`;
+    }
+  };
+  es.onerror = () => { es.close(); $('#start').disabled = false; };
+}
+
+async function loadOutputs() {
+  const tb = $('#outputs');
+  let outs;
+  try {
+    outs = await retry(() => api('/api/outputs'));
+  } catch (err) {
+    tb.innerHTML = '<tr><td colspan="7" class="err">Could not reach the server. '
+                 + 'Retrying…</td></tr>';
+    setTimeout(loadOutputs, 5000);
+    return;
+  }
+  if (!outs.length) { tb.innerHTML = '<tr><td colspan="7" class="muted">Nothing yet.</td></tr>'; return; }
+  tb.innerHTML = outs.map(o => `
+    <tr><td><b>${esc(o.title)}</b></td>
+      <td class="muted">${clock(o.duration)}</td>
+      <td class="muted">${Object.entries(o.languages||{}).map(([k,v])=>`${k} ${Math.round(v*100)}%`).join(', ')||'—'}</td>
+      <td>${o.speakers}</td>
+      <td class="muted">${o.speakers_from === 'teams' ? '✓ Teams' : o.speakers_from}</td>
+      <td class="muted">${o.llm && o.llm!=='disabled' ? o.llm : '—'}</td>
+      <td><button class="ghost" data-open="${esc(o.name)}">Open</button></td></tr>`).join('');
+  tb.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openOutput(b.dataset.open));
+}
+
+/* ---------- review ---------- */
+
+async function openOutput(name) {
+  const d = await api(`/api/outputs/${encodeURIComponent(name)}/result?words=1`);
+  R.name = name; R.turns = d.turns || []; R.offset = d.media?.offset || 0;
+  R.turn = R.word = -1; R.hits = []; R.hitAt = -1;
+
+  const m = d.metadata || {};
+  const langs = Object.entries(m.languages?.shares||{})
+        .map(([k,v]) => `${k} ${Math.round(v*100)}%`).join(', ');
+  const llm = m.llm || {};
+  $('#revTitle').textContent = `Review — ${d.title}`;
+  $('#summary').textContent =
+    `${clock(m.source?.duration||0)} · ${langs||'—'} · ${d.speakers.length} speakers ` +
+    `(${m.speakers_from?.source}) · ${m.asr?.backend}/${m.asr?.model}` +
+    (llm.turns_changed !== undefined
+      ? ` · LLM ${llm.mode}: ${llm.turns_changed} improved, ${llm.turns_rejected} rejected` : '');
+
+  const idx = {}; d.speakers.forEach((s,i) => idx[s.speaker] = i);
+  $('#speakers').innerHTML = d.speakers.map(s => `
+    <tr><td class="muted">${esc(s.speaker)}</td>
+      <td><input data-spk="${esc(s.speaker)}" value="${esc(s.name||s.speaker)}" style="width:100%"></td>
+      <td>${s.clock}</td><td>${(s.share*100).toFixed(1)}%</td><td>${s.turns}</td></tr>`).join('');
+  $('#spkfilter').innerHTML = '<option value="">All speakers</option>' +
+    d.speakers.map(s => `<option value="${esc(s.speaker)}">${esc(s.name||s.speaker)}</option>`).join('');
+  $('#downloads').innerHTML = (d.artifacts||[]).map(a =>
+    `<a href="/api/outputs/${encodeURIComponent(name)}/download/${a}" download>${a}</a>`).join('');
+
+  renderTranscript(idx);
+
+  const el = $('#media');
+  if (d.media?.available) {
+    el.src = d.media.url;
+    el.playbackRate = parseFloat($('#speed').value);
+    el.classList.toggle('novideo', !d.media.has_video);
+    $('#player').classList.remove('hide');
+  } else { el.removeAttribute('src'); $('#player').classList.add('hide'); }
+
+  $('#review').classList.remove('hide');
+  $('#review').scrollIntoView({behavior:'smooth'});
+}
+
+function renderTranscript(idx) {
+  R.starts = []; R.els = []; R.words = [];
+  const frag = document.createDocumentFragment();
+  R.turns.forEach((t, i) => {
+    R.starts.push(t.start);
+    const div = document.createElement('div');
+    div.className = 'turn'; div.dataset.i = i; div.dataset.spk = t.speaker;
+    const hue = HUES[(idx[t.speaker] ?? 0) % HUES.length];
+    const head = document.createElement('div');
+    head.className = 'thead';
+    head.innerHTML = `<time>${t.clock}</time>`
+      + `<span class="spk" style="color:hsl(${hue} 70% 60%)">${esc(t.name||t.speaker)}</span>`
+      + (t.language ? `<span class="lang">${esc(t.language)}</span>` : '');
+    div.appendChild(head);
+
+    const body = document.createElement('div');
+    const timed = (t.words||[]).filter(w => w.start != null && w.end != null);
+    if (timed.length) {
+      const starts = [], els = [];
+      timed.forEach(w => {
+        const sp = document.createElement('span');
+        sp.className = 'w'; sp.textContent = w.word + ' '; sp.dataset.t = w.start;
+        body.appendChild(sp); starts.push(w.start); els.push(sp);
+      });
+      R.words.push({starts, els});
+    } else { body.textContent = t.text; R.words.push({starts:[], els:[]}); }
+    div.appendChild(body);
+    frag.appendChild(div); R.els.push(div);
+  });
+  $('#turns').innerHTML = ''; $('#turns').appendChild(frag);
+}
+
+/* binary search: last index whose value <= t */
+function findIdx(arr, t) {
+  let lo = 0, hi = arr.length - 1, res = -1;
+  while (lo <= hi) { const m = (lo+hi)>>1; if (arr[m] <= t) { res = m; lo = m+1; } else hi = m-1; }
+  return res;
+}
+
+let seeking = false, raf = 0;
+function sync() {
+  const el = $('#media'); const t = el.currentTime + R.offset;
+  const ti = findIdx(R.starts, t);
+  if (ti !== R.turn) {
+    if (R.turn >= 0 && R.els[R.turn]) R.els[R.turn].classList.remove('active');
+    R.turn = ti; R.word = -1;
+    if (ti >= 0 && R.els[ti]) {
+      R.els[ti].classList.add('active');
+      if (R.follow) R.els[ti].scrollIntoView({block:'center', behavior:'smooth'});
+    }
+  }
+  if (R.turn >= 0) {
+    const wd = R.words[R.turn];
+    if (wd && wd.starts.length) {
+      const wi = findIdx(wd.starts, t);
+      if (wi !== R.word) {
+        if (R.word >= 0 && wd.els[R.word]) wd.els[R.word].classList.remove('now');
+        R.word = wi;
+        if (wi >= 0 && wd.els[wi]) wd.els[wi].classList.add('now');
+      }
+    }
+  }
+  $('#cur').textContent = clock(el.currentTime);
+  if (el.duration && !seeking) $('#seek').value = (el.currentTime/el.duration)*1000;
+}
+function loop() { sync(); if (!$('#media').paused) raf = requestAnimationFrame(loop); }
+function seekTo(sec) { const el = $('#media'); if (!el.src) return;
+  el.currentTime = Math.max(0, sec - R.offset); sync(); }
+
+function initPlayer() {
+  const el = $('#media');
+  el.addEventListener('play',  () => { $('#play').textContent='❚❚';
+    cancelAnimationFrame(raf); raf = requestAnimationFrame(loop); });
+  el.addEventListener('pause', () => { $('#play').textContent='▶'; cancelAnimationFrame(raf); });
+  el.addEventListener('timeupdate', () => { if (el.paused) sync(); });
+  el.addEventListener('seeked', sync);
+  el.addEventListener('loadedmetadata', () => { $('#dur').textContent = clock(el.duration); sync(); });
+
+  $('#play').onclick = () => el.paused ? el.play().catch(()=>{}) : el.pause();
+  $('#speed').onchange = e => el.playbackRate = parseFloat(e.target.value);
+  $('#seek').addEventListener('input', e => { seeking = true;
+    if (el.duration) { el.currentTime = (e.target.value/1000)*el.duration; sync(); } });
+  $('#seek').addEventListener('change', () => seeking = false);
+
+  $('#follow').onclick = () => { R.follow = !R.follow;
+    $('#follow').classList.toggle('on', R.follow);
+    if (R.follow && R.turn >= 0 && R.els[R.turn])
+      R.els[R.turn].scrollIntoView({block:'center', behavior:'smooth'}); };
+  $('#turns').addEventListener('wheel', () => {
+    if (R.follow) { R.follow = false; $('#follow').classList.remove('on'); } }, {passive:true});
+  $('#turns').addEventListener('click', e => {
+    const w = e.target.closest('.w'), turn = e.target.closest('.turn');
+    if (!turn) return;
+    seekTo(w ? parseFloat(w.dataset.t) : R.turns[+turn.dataset.i].start);
+    if (el.paused) el.play().catch(()=>{});
+  });
+
+  $('#spkfilter').onchange = applyFilters;
+  $('#search').addEventListener('input', applyFilters);
+  $('#search').addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); nextHit(e.shiftKey ? -1 : 1); } });
+
+  document.addEventListener('keydown', e => {
+    if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+    if ($('#review').classList.contains('hide')) return;
+    const step = e.shiftKey ? null : 5;
+    switch (e.key) {
+      case ' ': e.preventDefault(); $('#play').click(); break;
+      case 'ArrowLeft': e.preventDefault();
+        if (step) el.currentTime = Math.max(0, el.currentTime - step);
+        else if (R.turn > 0) seekTo(R.turns[R.turn-1].start);
+        sync(); break;
+      case 'ArrowRight': e.preventDefault();
+        if (step) el.currentTime = Math.min(el.duration||1e9, el.currentTime + step);
+        else if (R.turn < R.turns.length-1) seekTo(R.turns[R.turn+1].start);
+        sync(); break;
+      case 'ArrowUp': case 'ArrowDown': {
+        e.preventDefault();
+        const opts = [...$('#speed').options].map(o => o.value);
+        let i = opts.indexOf($('#speed').value);
+        i = Math.max(0, Math.min(opts.length-1, i + (e.key==='ArrowUp'?1:-1)));
+        $('#speed').value = opts[i]; el.playbackRate = parseFloat(opts[i]); break; }
+      case '/': e.preventDefault(); $('#search').focus(); break;
+    }
+  });
+}
+
+function applyFilters() {
+  const q = $('#search').value.trim().toLowerCase();
+  const spk = $('#spkfilter').value;
+  R.hits = []; R.hitAt = -1;
+  R.els.forEach((el, i) => {
+    const t = R.turns[i];
+    const ok = (!spk || t.speaker === spk) && (!q || t.text.toLowerCase().includes(q));
+    el.classList.toggle('dim', !ok);
+    if (q && ok) R.hits.push(i);
+  });
+  $('#hits').textContent = q ? `${R.hits.length} match${R.hits.length===1?'':'es'}` : '';
+}
+
+function nextHit(dir) {
+  if (!R.hits.length) return;
+  R.hitAt = (R.hitAt + dir + R.hits.length) % R.hits.length;
+  const i = R.hits[R.hitAt];
+  R.els[i].scrollIntoView({block:'center', behavior:'smooth'});
+  seekTo(R.turns[i].start);
+}
+
+$('#save').onclick = async () => {
+  if (!R.name) return;
+  const names = {};
+  document.querySelectorAll('#speakers input[data-spk]')
+    .forEach(i => names[i.dataset.spk] = i.value.trim());
+  $('#save').disabled = true; $('#savemsg').textContent = 'saving…';
+  const at = $('#media').currentTime, playing = !$('#media').paused;
+  try {
+    await api(`/api/outputs/${encodeURIComponent(R.name)}/rename`, {
+      method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({names})});
+    await openOutput(R.name);
+    $('#media').currentTime = at;
+    if (playing) $('#media').play().catch(()=>{});
+    $('#savemsg').textContent = 'saved';
+  } catch (err) { $('#savemsg').textContent = 'failed: ' + err.message; }
+  finally { $('#save').disabled = false; }
+};
+
+initPlayer(); loadConfig(); loadOutputs();
+</script>
+</body>
+</html>
