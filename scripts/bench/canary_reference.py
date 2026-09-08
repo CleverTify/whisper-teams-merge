@@ -6,7 +6,7 @@ audio is a 16 kHz 59 kbps meeting with crosstalk. Whether the margin transfers
 is exactly the question, and the only honest way to answer it is to run it.
 
 Output is the same JSON shape `scripts/fetch_soniox.py` writes, so
-`scripts/bench_wording.py` scores it with no new parsing code — as stream "D",
+`scripts/bench/bench_wording.py` scores it with no new parsing code — as stream "D",
 judged on the identical Teams-and-Soniox witness set that A0 is judged on.
 
 Chunking: Canary was trained on utterances up to 40 s and the encoder's memory

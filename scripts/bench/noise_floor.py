@@ -47,11 +47,11 @@ def run_once(n: int) -> dict:
          "--teams", str(corpus.teams_vtt())],
         cwd="/work", check=True, capture_output=True, text=True,
     )
-    scored = subprocess.run(
-        [sys.executable, "scripts/bench_wording.py"],
+    subprocess.run(
+        [sys.executable, "scripts/bench/bench_wording.py"],
         cwd="/work", check=True, capture_output=True, text=True,
-    ).stdout
-    data = json.loads(corpus.results() / "wording.json".read_text(encoding="utf-8"))
+    )
+    data = json.loads((corpus.results() / "wording.json").read_text(encoding="utf-8"))
     llm = json.loads((OUT / "result.json").read_text(encoding="utf-8"))["metadata"]["llm"]
     row = {
         "run": n,
@@ -75,7 +75,7 @@ def main() -> int:
         sd = statistics.stdev(vals) if len(vals) > 2 else 0.0
         print(f"  {key:<12} min {min(vals):.2f}%  max {max(vals):.2f}%  "
               f"spread {spread:.2f} pts  sd {sd:.2f}")
-    corpus.results() / "noise-floor.json".write_text(
+    (corpus.results() / "noise-floor.json").write_text(
         json.dumps(runs, indent=1), encoding="utf-8")
     print("\n  A0 must be identical across runs (ASR is cached and untouched).")
     print("  Any future A/B delta smaller than the A1 spread is not evidence.")

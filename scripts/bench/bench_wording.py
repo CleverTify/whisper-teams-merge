@@ -21,7 +21,7 @@ matter more than its value:
   and `WER_C` (scored against Soniox alone) exist to catch that, and the loop
   should only trust a change that improves both.
 
-    python scripts/bench_wording.py [bench/soniox/cs-plain.json]
+    python scripts/bench/bench_wording.py [bench/soniox/cs-plain.json]
 """
 
 from __future__ import annotations
@@ -377,7 +377,7 @@ def main() -> int:
     print("  A1 still scored 0.74 pts worse than A0 - with nothing to blame it on.")
     print("  Compare A1 against A1 from another arm. That is the valid comparison,")
     print("  and by it the merge is slightly positive, not negative.")
-    print(f"\n  anti-parrot control (vs Soniox alone, all columns):")
+    print("\n  anti-parrot control (vs Soniox alone, all columns):")
     print(f"  {'A0 raw ASR':<22} {resC['A0']['rate']*100:>13.2f}%")
     print(f"  {'A1 shipped':<22} {resC['A1']['rate']*100:>13.2f}%")
     if "D" in resC:
