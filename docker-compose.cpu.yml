@@ -1,0 +1,45 @@
+# Everything that is not an NVIDIA GPU: AMD, Intel, Apple Silicon, plain CPU.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.cpu.yml up
+#
+# An overlay rather than a profile, because a profile would still be a choice
+# you have to make before you know whether you need it. This way the default
+# command is the fast one, and this file is what the error message points at.
+#
+# `!reset` deletes the key rather than merging into it — without it the GPU
+# request from the base file survives the merge and fails exactly as before.
+# Needs Compose 2.24 or newer; `docker compose version` will tell you.
+#
+# AMD or Intel on Linux: stack the Vulkan overlay on top of this one to hand the
+# GPU to whisper.cpp.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.cpu.yml \
+#                  -f docker-compose.dri.yml up
+services:
+  app:
+    image: ghcr.io/clevertify/whisper-teams-merge:cpu
+    build:
+      args: {BACKEND: universal}
+    gpus: !reset null
+
+  llm:
+    # The CPU build of llama.cpp. The cuda12 image links libcuda.so.1 and does
+    # not start without the NVIDIA runtime, so this is a swap, not a tuning knob.
+    image: ghcr.io/ggml-org/llama.cpp:server
+    gpus: !reset null
+    environment:
+      LLAMA_ARG_N_GPU_LAYERS: "0"
+
+  # The vision model is off here rather than merely slow. Captioning 420 frames
+  # with an 8B VLM costs about 15 minutes on a GPU; on CPU it is hours, and it
+  # would run on every video upload without asking. Transcription is unaffected
+  # — the stage is optional and records that it was skipped.
+  #
+  # Turn it on with `SCREEN_VLM_ENABLED=true` in .env plus
+  # `docker compose --profile vision ...` if you genuinely want to wait.
+  llm-vision:
+    profiles: ["vision"]
+    image: ghcr.io/ggml-org/llama.cpp:server
+    gpus: !reset null
+    environment:
+      LLAMA_ARG_N_GPU_LAYERS: "0"

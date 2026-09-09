@@ -57,10 +57,32 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: docker-compose.yml parses, and every profile resolves
+      # Deliberately with NO .env on disk. That is the state a fresh clone is
+      # in, and the state the whole zero-config claim rests on — the previous
+      # version of this job did `cp .env.example .env` first, so it encoded the
+      # assumption it was supposed to be testing and would have passed while
+      # the product was broken.
+      - name: Default resolves with no .env, and asks for a GPU
         run: |
-          cp .env.example .env
-          for profile in nvidia universal "nvidia,screen"; do
-            echo "--- COMPOSE_PROFILES=$profile"
-            COMPOSE_PROFILES="$profile" docker compose config --services
-          done
+          test ! -f .env
+          services=$(docker compose config --services | sort | tr '\n' ' ')
+          echo "services: $services"
+          [ "$services" = "app llm llm-vision " ]
+          gpus=$(docker compose config | grep -c 'count: -1')
+          echo "gpu requests: $gpus"
+          [ "$gpus" = "3" ]
+
+      - name: CPU overlay resolves, and asks for no GPU at all
+        run: |
+          cpu="docker compose -f docker-compose.yml -f docker-compose.cpu.yml"
+          $cpu config --services
+          if $cpu config | grep -q 'count: -1'; then
+            echo "CPU overlay still requests a GPU — !reset did not apply"
+            exit 1
+          fi
+          $cpu config | grep -q 'whisper-teams-merge:cpu'
+
+      - name: The Vulkan overlay stacks on top of the CPU one
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.cpu.yml \
+                         -f docker-compose.dri.yml config >/dev/null

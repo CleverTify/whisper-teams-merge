@@ -1,0 +1,74 @@
+name: Publish images
+
+# Builds and pushes ghcr.io/clevertify/whisper-teams-merge:{cuda,cpu} on a tag.
+#
+# Honest status: the v1.0.1 images were pushed by hand from a developer machine,
+# because these images are large — ~20 GB for cuda, ~16 GB for cpu — and a
+# standard GitHub runner starts with roughly 14 GB free. The reclamation step
+# below buys about 30 GB more, which should be enough, but this workflow has not
+# yet completed a real run. If it fails on disk, either move to a larger runner
+# or keep publishing by hand:
+#
+#   docker build -t ghcr.io/clevertify/whisper-teams-merge:cuda --build-arg BACKEND=nvidia .
+#   docker push ghcr.io/clevertify/whisper-teams-merge:cuda
+#
+# GHCR packages are private by default even under a public repository. After the
+# first push, set each package to public in its own settings — the repo being
+# public does not do it for you.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - tag: cuda
+            backend: nvidia
+          - tag: cpu
+            backend: universal
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runner ships with Android SDKs, .NET, GHC and a large tool cache
+      # that this build has no use for. Removing them is the difference between
+      # a 20 GB image fitting and not.
+      - name: Reclaim disk
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        run: |
+          ref="${GITHUB_REF#refs/tags/}"
+          version="${ref#v}"
+          repo=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
+          echo "tags=ghcr.io/$repo:${{ matrix.tag }},ghcr.io/$repo:$version-${{ matrix.tag }}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          build-args: BACKEND=${{ matrix.backend }}
+          tags: ${{ steps.meta.outputs.tags }}
+          push: true
+          # No GHA layer cache: these layers are far larger than the 10 GB
+          # cache limit, so it would evict itself every run and cost time.
+          provenance: false

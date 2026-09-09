@@ -1,29 +1,15 @@
 name: transcribe
 
-# One command:  docker compose up
+# One command. No .env to copy, no profile to choose.
 #
-# Hardware is chosen by COMPOSE_PROFILES in .env:
-#   nvidia     — NVIDIA GPU        (faster-whisper on CUDA 12.8)
-#   universal  — AMD / Intel / Apple / CPU (whisper.cpp on Vulkan, CPU fallback)
-
-x-app: &app
-  env_file: [.env]
-  volumes:
-    - ./input:/work/input
-    - ./output:/work/output
-    - ./cache:/cache
-    # Bind-mounted so code changes take effect without a rebuild. Read-only:
-    # nothing in the container writes to its own source, and a writable source
-    # tree under a long-running service is a needless foothold.
-    - ./app:/work/app:ro
-    - ./scripts:/work/scripts:ro
-    - ./tests:/work/tests:ro
-    # Benchmark output. Untracked — everything here is derived from whatever
-    # recording you scored, so it is yours, not the repo's.
-    - ./bench:/work/bench
-  ports: ["127.0.0.1:8080:8080"]
-  shm_size: "8gb"
-  restart: unless-stopped
+#   docker compose up                                                  NVIDIA GPU
+#   docker compose -f docker-compose.yml -f docker-compose.cpu.yml up  everything else
+#
+# The application picks its own backend at runtime — faster-whisper when it can
+# see a CUDA device, whisper.cpp otherwise (app/config.py, resolve_backend). The
+# only thing it cannot decide for itself is whether Docker hands it a GPU in the
+# first place, because Compose resolves that on the host before any container
+# exists. Hence exactly two commands, and the second one is in the line above.
 
 x-llm: &llm
   environment: &llm-env
@@ -50,23 +36,44 @@ x-llm: &llm
     start_period: 900s
 
 services:
-  # ---- NVIDIA -------------------------------------------------------------
   app:
-    <<: *app
-    profiles: ["nvidia"]
+    image: ghcr.io/clevertify/whisper-teams-merge:cuda
     build:
       context: .
       dockerfile: Dockerfile
       args: {BACKEND: nvidia}
-    image: transcribe:nvidia
+    # Optional, and optional on purpose: every setting has a working default in
+    # app/config.py, so there is nothing to copy before the first run. Written
+    # long-hand because the short form `env_file: [.env]` means required:true,
+    # and a missing file aborted the whole `up` before anything started.
+    env_file:
+      - path: .env
+        required: false
+    # >>> No NVIDIA GPU? This line is the one that fails, with
+    # >>>   could not select device driver "" with capabilities: [[gpu]]
+    # >>> Run this instead — same stack, CPU build, one command:
+    # >>>   docker compose -f docker-compose.yml -f docker-compose.cpu.yml up
     gpus: all
-    environment:
-      LLM_BASE_URL: http://llm:8081/v1
+    volumes:
+      - ./input:/work/input
+      - ./output:/work/output
+      - ./cache:/cache
+      # Bind-mounted so code changes take effect without a rebuild. Read-only:
+      # nothing in the container writes to its own source, and a writable source
+      # tree under a long-running service is a needless foothold.
+      - ./app:/work/app:ro
+      - ./scripts:/work/scripts:ro
+      - ./tests:/work/tests:ro
+      # Benchmark output. Untracked — everything here is derived from whatever
+      # recording you scored, so it is yours, not the repo's.
+      - ./bench:/work/bench
+    ports: ["127.0.0.1:8080:8080"]
+    shm_size: "8gb"
+    restart: unless-stopped
     depends_on: [llm]
 
   llm:
     <<: *llm
-    profiles: ["nvidia"]
     image: ghcr.io/ggml-org/llama.cpp:server-cuda12
     gpus: all
     environment:
@@ -77,18 +84,16 @@ services:
     # that back to Whisper and pyannote, and the next request wakes it.
     command: ["--sleep-idle-seconds", "${LLM_SLEEP_IDLE_SECONDS:-60}"]
 
-
   # ---- vision, for screen recordings --------------------------------------
   # Its own service rather than a second model inside `llm`: llama.cpp's router
   # mode does not release GPU memory when a model idles out, and does not
   # enforce its model cap under concurrency. Both are fatal on a 12 GB card.
   #
-  # Started only by the "screen" profile, so audio-only work never pays for it.
   # 5.9 GB of text model and ~6 GB of vision model cannot both be resident, so
-  # the pipeline waits on genuinely free VRAM before loading either.
+  # the pipeline waits on genuinely free VRAM before loading either. Audio-only
+  # jobs never load this at all — the model evicts itself when idle.
   llm-vision:
     <<: *llm
-    profiles: ["screen"]
     image: ghcr.io/ggml-org/llama.cpp:server-cuda12
     gpus: all
     environment:
@@ -108,62 +113,3 @@ services:
       LLAMA_ARG_HOST: "0.0.0.0"
       LLAMA_ARG_N_GPU_LAYERS: "99"
     command: ["--sleep-idle-seconds", "${SCREEN_VLM_SLEEP_IDLE_SECONDS:-120}"]
-  # ---- AMD / Intel / Apple / CPU -----------------------------------------
-  app-universal:
-    <<: *app
-    profiles: ["universal"]
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args: {BACKEND: universal}
-    image: transcribe:universal
-    environment:
-      LLM_BASE_URL: http://llm-universal:8081/v1
-    depends_on: [llm-universal]
-    # No `devices: /dev/dri` here, deliberately.
-    #
-    # /dev/dri is what exposes an AMD or Intel GPU to Vulkan, and it only exists
-    # on Linux. Docker treats a missing device as a hard error rather than
-    # skipping it, so listing it unconditionally made `docker compose up` die
-    # with "error gathering device information" on every Mac and Windows host —
-    # exactly the machines this profile exists to serve.
-    #
-    # Linux users with an AMD or Intel GPU opt in:
-    #   docker compose -f docker-compose.yml -f docker-compose.dri.yml up
-
-  llm-universal:
-    <<: *llm
-    profiles: ["universal"]
-    image: ghcr.io/ggml-org/llama.cpp:server
-    environment:
-      <<: *llm-env
-      LLAMA_ARG_N_GPU_LAYERS: "0"
-
-  # ---- the only service with no profile -----------------------------------
-  #
-  # Every other service is behind `nvidia` or `universal`, so an empty or
-  # mistyped COMPOSE_PROFILES made `docker compose up` start nothing, print
-  # nothing, and exit 0. A tool that succeeds having done nothing is the worst
-  # failure mode there is, so this one always runs and says what is wrong.
-  preflight:
-    image: busybox:1.37
-    environment:
-      PROFILES: "${COMPOSE_PROFILES:-}"
-    command:
-      - sh
-      - -c
-      - |
-        case ",$${PROFILES}," in
-          *,nvidia,* | *,universal,*) exit 0 ;;
-        esac
-        echo
-        echo "  COMPOSE_PROFILES does not select a hardware profile."
-        echo "  Got: '$${PROFILES}'"
-        echo
-        echo "  Put one of these in .env, then run docker compose up again:"
-        echo "    COMPOSE_PROFILES=nvidia,screen   # NVIDIA GPU"
-        echo "    COMPOSE_PROFILES=universal       # AMD / Intel / Apple / CPU"
-        echo
-        echo "  .env.example has both, with the reasoning."
-        echo
-        exit 1

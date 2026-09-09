@@ -16,8 +16,7 @@ accepted. The issue template asks for the same thing.
 ## Running it
 
 ```bash
-cp .env.example .env        # set HF_TOKEN if you want automatic diarization
-docker compose up
+docker compose up      # add -f docker-compose.cpu.yml if you have no NVIDIA GPU
 ```
 
 Code in `app/` and `scripts/` is bind-mounted, so an edit takes effect on the

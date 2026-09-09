@@ -142,14 +142,13 @@ def _prefetch(backend: str, languages: list[str]) -> bool:
 
 
 def _download_ggml(path: Path) -> bool:
-    import urllib.request
+    """Prefetch for `warmup`. The download itself lives in asr.download_ggml,
+    which is also what a job calls when it finds the model missing."""
+    from app.asr import download_ggml
 
-    name = path.name.replace("ggml-", "").replace(".bin", "")
-    url = f"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{name}.bin"
-    path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        urllib.request.urlretrieve(url, path)
-        print(f"    OK ({path.stat().st_size / 1024**2:.0f} MB)")
+        got = download_ggml(path)
+        print(f"    OK ({got.stat().st_size / 1024**2:.0f} MB)")
         return True
     except Exception as exc:
         print(f"    FAILED: {exc}")
@@ -186,6 +185,19 @@ def cmd_transcribe(args) -> int:
         if getattr(args, k, None) is not None
     }
     active = with_overrides(settings, overrides)
+
+    # Fail here rather than at stage four. Without a Teams transcript the
+    # speakers come from pyannote, which is gated behind a HuggingFace token,
+    # and diarization runs after ingest, language ID, ASR and alignment -- so
+    # the old behaviour was to chew through a whole recording before saying
+    # 'no token'. The web UI already refuses at submit; this matches it.
+    if not teams and active.diarize and not active.hf_token and not args.no_diarize:
+        log.error(
+            "no HF_TOKEN, so speakers cannot be detected. Either pass --teams "
+            "with the Teams transcript (better anyway, it carries the real "
+            "names), put HF_TOKEN in .env, or pass --no-diarize to transcribe "
+            "without speaker labels.")
+        return 2
 
     from app.pipeline import Options, run
 

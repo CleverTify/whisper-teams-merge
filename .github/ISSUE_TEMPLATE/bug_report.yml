@@ -20,12 +20,16 @@ body:
     validations:
       required: true
 
-  - type: input
-    id: profiles
+  - type: dropdown
+    id: startup
     attributes:
-      label: COMPOSE_PROFILES
-      description: The line from your .env — e.g. `nvidia,screen` or `universal`.
-      placeholder: nvidia,screen
+      label: How did you start it?
+      options:
+        - docker compose up
+        - docker compose -f docker-compose.yml -f docker-compose.cpu.yml up
+        - "…plus -f docker-compose.dri.yml (AMD/Intel Vulkan)"
+        - docker run
+        - Something else — describe it below
     validations:
       required: true
 

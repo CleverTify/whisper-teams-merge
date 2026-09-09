@@ -12,32 +12,53 @@ list. The header reports the detected GPU, the ASR backend and the merge model.]
 ## Run it
 
 ```bash
-cp .env.example .env && docker compose up
+docker compose up
 ```
 
-Then open **http://127.0.0.1:8080**.
+Then open **http://127.0.0.1:8080**. Nothing to copy, nothing to configure —
+the app detects the hardware and picks its own backend.
 
-You need Docker, and for the NVIDIA path the
-[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html)
-— without it `docker compose up` fails with `could not select device driver ""
-with capabilities: [[gpu]]`, which is not a hint anyone enjoys receiving.
+**No NVIDIA GPU?** That command fails immediately with `could not select device
+driver "" with capabilities: [[gpu]]`, because Docker decides about GPUs before
+the container exists and so nothing inside can detect anything. One command
+covers everything else — AMD, Intel, Apple Silicon, plain CPU:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cpu.yml up
+```
+
+Or skip the build entirely and run the published image:
+
+```bash
+docker run --gpus all -p 127.0.0.1:8080:8080 \
+  -v ./cache:/cache -v ./input:/work/input -v ./output:/work/output \
+  ghcr.io/clevertify/whisper-teams-merge:cuda      # :cpu without --gpus all
+```
+
+That gets you transcription, diarization and export. It does **not** get you the
+LLM merge — that needs the second container, so it is the `docker compose` path.
+The app notices and carries on without it rather than failing.
+
+The NVIDIA path also needs the
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html).
 
 Budget **~35 GB of disk**, measured rather than estimated:
 
 | | |
 |---|---|
-| the NVIDIA image | ~20 GB — most of it the cu128 PyTorch wheels, which bundle CUDA's own libraries |
+| the image | ~20 GB CUDA, ~16 GB CPU — most of it PyTorch wheels bundling their own CUDA libraries |
 | models, fetched on first start into `./cache` | ~15 GB |
 
 The models are Whisper large-v3 (2.9 GB), the pyannote diarizer, a per-language
-forced aligner, the Qwen3-8B merge model (4.7 GB), and — only with the `screen`
-profile — the Qwen3-VL vision model and its projector (5.4 GB). Drop `screen`
-from `COMPOSE_PROFILES` and you save that last 5.4 GB. After the first run it
-never needs the network again.
+forced aligner, the Qwen3-8B merge model (4.7 GB), and the Qwen3-VL vision model
+with its projector (5.4 GB, GPU only — the CPU overlay leaves it off, since
+captioning on CPU takes hours). After the first run it never needs the network
+again.
 
-Set `HF_TOKEN` in `.env` if you want automatic speaker detection — see
-[Diarization](#diarization). You do not need it when you upload a Teams
-transcript, which is the better path anyway: Teams knows the real names.
+Speaker detection needs a `HF_TOKEN` — put one in a `.env` file, which is
+optional and only ever used for tuning; see [Diarization](#diarization). You do
+not need it at all when you upload a Teams transcript, which is the better path
+anyway: Teams knows the real names.
 
 Check the machine before committing an hour to a long recording:
 
@@ -52,12 +73,14 @@ report.
 
 ## Hardware
 
-One line in `.env` selects the build:
+Nothing to select. Inside the container the app calls `torch.cuda.is_available()`
+once and routes itself — faster-whisper on CUDA when there is a device,
+whisper.cpp otherwise — and it corrects its own precision to int8 on CPU. The
+model it needs is downloaded on first use either way.
 
-```bash
-COMPOSE_PROFILES=nvidia,screen     # NVIDIA GPU — faster-whisper on CUDA 12.8
-COMPOSE_PROFILES=universal        # AMD / Intel / Apple Silicon / CPU
-```
+The one thing it cannot decide is whether Docker gives it a GPU at all, which is
+settled on the host before any container exists. That is the whole reason there
+are two commands rather than one.
 
 | | ASR | Diarization |
 |---|---|---|
@@ -71,17 +94,18 @@ Two things worth knowing rather than discovering later:
 - **Apple Silicon gets no GPU in Docker.** Apple's Hypervisor.framework exposes
   no virtual GPU, and Apple's own Container runtime lists passthrough only on
   its roadmap. On a Mac this runs on CPU — correct, just slow. Measured on the
-  `universal` build: **0.3x realtime**, so budget around three hours for a
-  one-hour meeting, and start it before you need it.
+  CPU build: **0.3x realtime**, so budget around three hours for a one-hour
+  meeting, and start it before you need it.
 - **AMD needs whisper.cpp** because CTranslate2 has no ROCm backend at all, so
   faster-whisper cannot drive an AMD GPU. Vulkan covers AMD and Intel — but the
   device has to be handed in explicitly, and only Linux has one to hand:
 
   ```bash
-  docker compose -f docker-compose.yml -f docker-compose.dri.yml up
+  docker compose -f docker-compose.yml -f docker-compose.cpu.yml \
+                 -f docker-compose.dri.yml up
   ```
 
-  Without that overlay the universal profile still works, on CPU. With it on a
+  Without that overlay the CPU build still works, just on CPU. With it on a
   machine that has no `/dev/dri`, Docker refuses to start anything at all,
   which is why it is not the default.
 
@@ -185,11 +209,10 @@ Tady vidíš, že to filtruje hnedka.
 ```
 
 Frames are sampled at scene changes, read by tesseract, and described by a local
-vision model (`llm-vision`, Qwen3-VL-8B). The `screen` profile is in the default
-`COMPOSE_PROFILES` because without it a video job silently produces no
-annotations — handled, but the app quietly cannot do what it claims. Audio-only
-work pays nothing for it: the model evicts itself when idle and loads only when
-a video arrives. On a 92-minute 1080p recording that is 420 frames and about 15
+vision model (`llm-vision`, Qwen3-VL-8B), which starts by default on the GPU
+path. Audio-only work pays nothing for it: the model evicts itself when idle and
+loads only when a video arrives. The CPU overlay leaves it out — captioning 420
+frames with an 8B model takes about 15 minutes on a GPU and hours without one. On a 92-minute 1080p recording that is 420 frames and about 15
 minutes on top of the transcription.
 
 Gated entirely on the video track ffprobe already detects, so **audio-only input

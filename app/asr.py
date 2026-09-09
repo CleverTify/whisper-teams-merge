@@ -157,6 +157,36 @@ class FasterWhisper:
 # whisper.cpp (Vulkan / CPU) — everything that is not NVIDIA
 # ---------------------------------------------------------------------------
 
+def download_ggml(path: Path) -> Path:
+    """Fetch a whisper.cpp model on first use.
+
+    This used to raise and tell the user to run `warmup` first. That made the
+    CPU path a two-step install for no reason: the backend already selects
+    itself correctly on a machine with no GPU, and then the very first job died
+    -- the one moment a new user has no patience for a second command.
+
+    Downloaded to a .part file and renamed, because urlretrieve straight to the
+    final path leaves a truncated file behind when it is interrupted, and a
+    truncated file satisfies `.exists()` forever after.
+    """
+    import urllib.request
+
+    name = path.name.replace("ggml-", "").replace(".bin", "")
+    url = f"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-{name}.bin"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    part = path.with_name(path.name + ".part")
+    log.info("fetching whisper.cpp model %s (first run only, ~3 GB)", path.name)
+    try:
+        urllib.request.urlretrieve(url, part)
+        part.replace(path)
+    except Exception as exc:
+        part.unlink(missing_ok=True)
+        raise ASRError(
+            f"could not download the whisper.cpp model from {url}: {exc}") from exc
+    log.info("whisper.cpp model ready (%.0f MB)", path.stat().st_size / 1024 ** 2)
+    return path
+
+
 class WhisperCpp:
     name = "whisper.cpp"
 
@@ -167,11 +197,7 @@ class WhisperCpp:
     def _ensure_model(self) -> Path:
         if self.model_path.exists():
             return self.model_path
-        raise ASRError(
-            f"whisper.cpp model missing: {self.model_path}\n"
-            "Run `docker compose run --rm app-universal warmup` to download "
-            "it (or `app` on the nvidia profile)."
-        )
+        return download_ggml(self.model_path)
 
     def transcribe(self, audio: np.ndarray, language: str) -> list[dict]:
         model = self._ensure_model()
