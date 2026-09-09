@@ -27,7 +27,8 @@ covers everything else — AMD, Intel, Apple Silicon, plain CPU:
 docker compose -f docker-compose.yml -f docker-compose.cpu.yml up
 ```
 
-Or skip the build entirely and run the published image:
+Either command builds the image on first run. Once the images are on GHCR you
+can skip the build and go straight to a single container:
 
 ```bash
 docker run --gpus all -p 127.0.0.1:8080:8080 \
