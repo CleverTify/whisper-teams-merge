@@ -125,6 +125,14 @@ ENV HOME=/home/app \
     TOKENIZERS_PARALLELISM=false \
     PYTHONPATH=/work
 
+# Links the GHCR package back to this repository, so the package page shows the
+# README and the repo sidebar shows the package. It does NOT make the package
+# public — container package visibility is UI-only, there is no REST endpoint
+# for it, and GHCR defaults to private even under a public repo.
+LABEL org.opencontainers.image.source="https://github.com/CleverTify/whisper-teams-merge" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.description="Local meeting transcription with speaker diarization, merged with a Microsoft Teams transcript by a local LLM."
+
 WORKDIR /work
 COPY app /work/app
 COPY scripts /work/scripts
