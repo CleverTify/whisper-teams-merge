@@ -24,3 +24,7 @@ pydantic-settings>=2.6.0
 
 # Audio IO
 soundfile>=0.12.1
+
+# Security floor. certifi before 2026.10.18 still trusts the compromised
+# eMudhra root CA. Pulled in transitively (requests, httpx), so pin a floor here.
+certifi>=2026.10.18
