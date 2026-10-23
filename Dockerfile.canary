@@ -25,7 +25,12 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Blackwell (sm_120) needs the cu128 wheels; the default index ships builds that
 # do not cover this architecture.
-RUN pip install --upgrade pip setuptools wheel Cython packaging \
+# emSign CA incident (GHSA-6q48-6c7w-9gw2): a plain `pip install --upgrade pip`
+# runs over the old pip, whose vendored certifi trusts the compromised emSign
+# intermediates. Take pip 26.2.2 from a hash-pinned wheel first, then let the
+# fixed pip fetch everything else.
+RUN pip install 'pip @ https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70' \
+ && pip install --upgrade setuptools wheel Cython packaging \
  && pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu128
 
 RUN pip install "nemo_toolkit[asr]"
