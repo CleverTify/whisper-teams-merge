@@ -66,7 +66,12 @@ RUN printf '/opt/whispercpp/bin\n' > /etc/ld.so.conf.d/whispercpp.conf \
 ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv "$VIRTUAL_ENV"
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
-RUN pip install --upgrade pip wheel setuptools
+# emSign CA incident (GHSA-6q48-6c7w-9gw2): a plain `pip install --upgrade pip`
+# runs over the old pip, whose vendored certifi trusts the compromised emSign
+# intermediates. Take pip 26.2.2 from a hash-pinned wheel first, then let the
+# fixed pip fetch everything else.
+RUN pip install 'pip @ https://files.pythonhosted.org/packages/3f/06/3e4420302363fbb71be3c7f35ce042f54bfca330e3e66b3a2e3c4cca579f/pip-26.2.2-py3-none-any.whl#sha256=fd7f4dfa8190e014013b9f08f3e973f4e4c26ffd179a204895533a7254813a70' \
+ && pip install --upgrade wheel setuptools
 
 # Torch first, from the index matching the target. On the nvidia target this
 # must be cu128 — PyPI's default wheel has no sm_120 kernels and every CUDA op
